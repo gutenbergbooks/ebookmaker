@@ -847,11 +847,19 @@ class Writer(writers.HTMLishWriter):
 
     @staticmethod
     def fix_incompatible_css(sheet):
-        """ Strip CSS properties and values that are not EPUB compatible. """
+        """ Strip CSS properties and values that are not EPUB compatible. 
+            Unpack "media handheld" rules
+        """
 
         cssclass = re.compile(r'\.(-?[_a-zA-Z]+[_a-zA-Z0-9-]*)')
 
         for rule in sheet:
+            if rule.type == rule.MEDIA_RULE:
+                if rule.media.mediaText.find ('handheld') > -1:
+                    debug ("Unpacking CSS @media handheld rule.")
+                    rule.media.mediaText = 'all'
+                    info("replacing  @media handheld rule with @media all")
+
             if rule.type == rule.STYLE_RULE:
                 ruleclasses = list(cssclass.findall(rule.selectorList.selectorText))
                 for p in list(rule.style):
@@ -991,6 +999,15 @@ class Writer(writers.HTMLishWriter):
         for e in xpath(xhtml, "//xhtml:img[@class ='dropcap']"):
             e.tag = NS.xhtml.span
             e.text = e.get('alt', '')
+
+    @staticmethod
+    def strip_data_attribs(xhtml):
+        """ Parser leaves some data elements for HTML. Epubcheck doesn't like these.
+        """
+        for e in xpath(xhtml, "//@*[starts-with(name(), 'data')]/.."):
+            for key in e.attrib.keys():
+                if key.startswith('data-'):
+                    del e.attrib[key]
 
 
     @staticmethod
@@ -1315,6 +1332,7 @@ class Writer(writers.HTMLishWriter):
                         # strip all links to items not in manifest
                         p.strip_links(xhtml, job.spider.dict_urls_mediatypes())
                         self.strip_links(xhtml, job.spider.dict_urls_mediatypes())
+                        self.strip_data_attribs(xhtml)
 
                         self.strip_noepub(xhtml)
                         # self.strip_rst_dropcaps(xhtml)
